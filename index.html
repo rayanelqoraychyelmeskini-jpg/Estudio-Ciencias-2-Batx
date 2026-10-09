@@ -93,10 +93,15 @@ $('ai').onclick=async()=>{
  if(!sampleFn)return;$('st').textContent='Generando con IA…';$('ai').disabled=true;
  try{const r=await sampleFn(`Eres profesor de ${sub=='mates'?'Matemáticas II':'Física'} de 2º de Bachillerato en las Islas Baleares (PAU/UIB). Crea UN ejercicio original y aleatorio (semilla ${Math.random().toString(36).slice(2,8)}) del tema "${cur.n}", con nivel y estilo de examen PAU UIB (con apartados a, b, c si procede). Responde en español con este formato exacto, sin nada más:\nENUNCIADO:\n<texto>\nSOLUCIÓN:\n<resolución paso a paso>`,{cache:false});
   const [q,a]=r.text.split(/SOLUCI[ÓO]N:/i);showEx((q||'').replace(/ENUNCIADO:/i,'').trim(),(a||'Sin solución.').trim());$('st').textContent='Ejercicio generado por IA. Revisa siempre la solución.'}
- catch(e){$('st').textContent=e&&e.code=='not_granted'?'Permiso denegado para usar la IA.':'No se pudo generar ahora; prueba otra vez.'}
+ catch(e){$('st').textContent=e&&e.code=='not_granted'?'Permiso denegado para usar la IA.':'No se pudo generar: '+(e&&e.message||'error')}
  $('ai').disabled=false};
 draw();
-const gem=async p=>{const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:p}]}]})});if(!r.ok)throw new Error(r.status);const d=await r.json();return{text:d.candidates[0].content.parts.map(x=>x.text||'').join('')}};
+const GB='https://generativelanguage.googleapis.com/v1beta/';let gmodel=GEMINI_MODEL;
+const gcall=(m,p)=>fetch(`${GB}models/${m}:generateContent?key=${GEMINI_KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:p}]}]})});
+const gpick=async()=>{const d=await (await fetch(`${GB}models?key=${GEMINI_KEY}&pageSize=200`)).json();const ok=(d.models||[]).filter(x=>(x.supportedGenerationMethods||[]).includes('generateContent')&&/gemini/.test(x.name)&&!/image|tts|audio|live|embed|robotics|computer|preview|exp|thinking|vision|learnlm|gemma/.test(x.name));const f=ok.find(x=>/flash-lite/.test(x.name))||ok.find(x=>/flash/.test(x.name))||ok[0];return f?f.name.replace('models/',''):null};
+const gem=async p=>{let r=await gcall(gmodel,p);if(!r.ok&&(r.status==404||r.status==400)){const m=await gpick();if(m&&m!=gmodel){gmodel=m;r=await gcall(gmodel,p)}}
+if(!r.ok){let m='';try{m=(await r.json()).error.message}catch(e){}throw new Error(r.status+' ('+gmodel+'): '+m)}
+const d=await r.json();return{text:d.candidates[0].content.parts.map(x=>x.text||'').join('')}};
 (async()=>{try{const s=await window.claude?.use('sample');if(s){sampleFn=s;$('ai').style.display=''}}catch(e){}
 if(!sampleFn&&GEMINI_KEY&&!GEMINI_KEY.startsWith('PEGA')){sampleFn=gem;$('ai').style.display=''}})();
 </script></body></html>
